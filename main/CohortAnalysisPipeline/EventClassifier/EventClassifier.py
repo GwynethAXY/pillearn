@@ -1,7 +1,3 @@
-import sys
-import pyspark as ps
-import warnings
-import re
 import json
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SparkSession
@@ -32,9 +28,9 @@ def getBucket(date, refDate, analysisDuration, binDuration):
 	bucket = int((year*365+month*30+day-refYear*365-refMonth*30-refDay) // binDuration + 1)
 	return bucket
 
-def main(inputDir, outputDir, configFile):
-	ANALYSIS_DURATION = int(configFile.get('main','ANALYSIS_DURATION'))
-	BIN_DURATION = int(configFile.get('main','BIN_DURATION'))
+def main(inputDir, outputDir, config):
+	ANALYSIS_DURATION = int(config['main']['ANALYSIS_DURATION'])
+	BIN_DURATION = int(config['main']['BIN_DURATION'])
 	df = spark.read.parquet(inputDir+'/*')
 	bucket_udf = udf(lambda date, refDate, analysisDuration, binDuration: getBucket(date, refDate, analysisDuration, binDuration))
 	df = df.withColumn('bucket',bucket_udf(df['start_time'],df['reference'],lit(ANALYSIS_DURATION), lit(BIN_DURATION)))
@@ -47,6 +43,6 @@ if __name__ == "__main__":
 	parser.add_argument('-o', '--output', required=True)
 	parser.add_argument('-c', '--config', required=True)
 	args = parser.parse_args()
-	config = ConfigParser()
-	config.read(args.config)
+	with open('config.json') as f:
+	    config = json.load(f)
 	main(args.input,args.output,config)
