@@ -1,47 +1,56 @@
-import findspark
-findspark.init()
-findspark.find()
-import pyspark
-findspark.find()
-
-import config as cfg
-import pyspark.sql.functions as func
-# from pyspark.sql.functions import udf
-from pyspark.sql.types import StringType
-
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SparkSession
-# conf = pyspark.SparkConf().setAppName('appName').setMaster('local')
-sc = SparkContext.getOrCreate();
-spark = SparkSession(sc)
+from pyspark.sql.context import SQLContext
+from pyspark.sql.functions import udf
+from pyspark.sql.functions import lit
+from pyspark.sql.window import Window
+import pyspark.sql.functions as F
+from pyspark.sql.functions import lit, udf
+import pyspark.sql.types as T 
+import argparse
+from configparser import ConfigParser
+import json
 
-from pyspark.sql import SQLContext
-sqlContext = SQLContext(sc)
+conf = SparkConf()
+conf.setAppName('pillar')
+sc = SparkContext(conf=conf)
+sc.setLogLevel('WARN')
+sql_context = SQLContext(sc)
+spark = SparkSession.builder.appName('pillar').getOrCreate()
 
-def getActivityType(activityCount):
-    if activityCount >= cfg.user_activity_types['active']: 
-        return 'active'
-    elif activityCount >= cfg.user_activity_types['semi-active']: 
+def getActivityType(activityCount, ACTIVE_THRESHOLD, SEMI_ACTIVE_THRESHOLD, RARE_THRESHOLD, INACTIVE_THRESHOLD):
+    if activityCount >= ACTIVE_THRESHOLD: 
+      return 'active'
+    elif activityCount >= SEMI_ACTIVE_THRESHOLD: 
         return 'semiactive'
-    elif activityCount >= cfg.user_activity_types['rare']: 
+    elif activityCount >= RARE_THRESHOLD: 
         return 'rare'
-    elif activityCount >= cfg.user_activity_types['not active']: 
-        return 'not active'
+    elif activityCount >= INACTIVE_THRESHOLD: 
+        return 'inactive'
     else: 
         return 'null'
 
-activity_type_udf = func.udf(lambda z: getActivityType(int(z)))
-genderage_df = spark.read.csv('CLEANED_child_profile.csv', header=True)
-def userAggregator(df):
-    df = df.join(genderage_df, 'Device ID', 'inner')
-    df = df.withColumn('Activity Type', activity_type_udf('Activity Count'))
-    df = df.select('Device ID','Time Period', 'Age', 'Gender', 
-                   'Activity Type'
-                  )
-    df = df.groupBy(['Age', 'Gender','Activity Type', 'Time Period']).agg(
-     func.count(func.lit(1)).alias("User Counts")
-   )
-    return df
-input_df = spark.read.csv("sample_input.csv",header=True)
-result = userAggregator(input_df)
-result.write.csv('sample_output')
+def main(inputDir,profileMap,outputDir,config):
+    ACTIVE_THRESHOLD = config['activity']['ACTIVE']
+    SEMI_ACTIVE_THRESHOLD = config['activity']['SEMI-ACTIVE']
+    RARE_THRESHOLD = config['activity']['RARE']
+    INACTIVE_THRESHOLD = config['activity']['INACTIVE']
+    activity_type_udf = udf(lambda count, active,semi,rare,inactive: getActivityType(int(count),active,semi,rare,inactive))
+    profile = spark.read.csv(profileMap, header='true')
+    df = spark.read.parquet(inputDir+"/*")
+    df = df.join(profile, 'device_id')
+    df = df.withColumn('activity_type', activity_type_udf(df['count'],lit(ACTIVE_THRESHOLD),lit(SEMI_ACTIVE_THRESHOLD),lit(RARE_THRESHOLD),lit(INACTIVE_THRESHOLD)))
+    df = df.select('device_id','bucket', 'age', 'gender', 'activity_type')
+    df = df.groupBy(['age', 'gender','activity_type', 'bucket']).agg(F.count(lit(1)).alias("count"))
+    df.write.parquet(outputDir)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser() 
+    parser.add_argument('-i', '--input', required=True)
+    parser.add_argument('-m', '--map', required=True)
+    parser.add_argument('-o', '--output', required=True)
+    parser.add_argument('-c', '--config', required=True)
+    args = parser.parse_args()
+  with open('../config.json') as f:
+      config = json.load(f)
+    main(args.input,args.map,args.output,config)
