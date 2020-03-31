@@ -5,7 +5,7 @@ from pyspark.sql.functions import udf
 from pyspark.sql.functions import lit
 import pyspark.sql.functions as F
 import argparse
-from configparser import ConfigParser
+import json
 
 from Utils.Utils import splitDate, formDate
 
@@ -40,7 +40,9 @@ def getSpecificCutoff(date,analysisDuration):
 	d = int(analysisDuration)//30
 	year,month,day = splitDate(date)
 	time = date.split('T')[1]
-	month = (month + d) % 12
+	newMonth = (month + d) % 12
+	if newMonth < month:
+		year += 1
 	if month == 0:
 		month = 12
 	return formDate(year,month,day,time)
@@ -53,10 +55,10 @@ def getSpecificRefDate(date,shiftFactor):
 		month = 12
 	return formDate(year,month,day,time)
 
-def main(inputDir, outputDir, configFile):
-	CUTOFF_DATE = configFile.get('main','CUTOFF_DATE')
-	REFERENCE_DATE = configFile.get('main','REFERENCE_DATE')
-	ANALYSIS_DURATION = int(configFile.get('main','ANALYSIS_DURATION'))
+def main(inputDir, outputDir, config):
+	CUTOFF_DATE = config['main']['CUTOFF_DATE']
+	REFERENCE_DATE = config['main']['REFERENCE_DATE']
+	ANALYSIS_DURATION = int(config['main']['ANALYSIS_DURATION'])
 
 	get_shift_udf = udf(lambda date, refDate: getShiftFactor(date,refDate))
 	shift_udf = udf(lambda date, shiftFactor: shiftDate(date, shiftFactor))
@@ -81,6 +83,9 @@ if __name__ == "__main__":
 	parser.add_argument('-o', '--output', required=True)
 	parser.add_argument('-c', '--config', required=True)
 	args = parser.parse_args()
-	config = ConfigParser()
-	config.read(args.config)
+	with open('config.json') as f:
+	    config = json.load(f)
 	main(args.input,args.output,config)
+
+
+
