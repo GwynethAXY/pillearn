@@ -1,0 +1,19 @@
+{
+  "main": {
+    "CUTOFF_DATE": "2019-12-01T00:00:00",
+    "REFERENCE_DATE":"2019-01-01T00:00:00",
+    "ANALYSIS_DURATION": 90,
+    "BIN_DURATION": 30
+  },
+  "usage": {
+    "LONG_ITEM_DURATION_THRESHOLD": 120,
+    "LONG_ITEM_ACTIVE_PERCENTAGE":0.5
+  },
+  "activity": {
+    "ACTIVE":5,
+    "SEMI-ACTIVE":3,
+    "RARE":1,
+    "INACTIVE":0
+  }
+
+}
