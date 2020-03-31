@@ -1,7 +1,3 @@
-import sys
-import pyspark as ps
-import warnings
-import re
 import json
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SparkSession
@@ -28,7 +24,7 @@ def getItemName(payload):
 def getEndTime(end_time_list):
 	return end_time_list[0]
 
-def main(inputDir, outputDir, configFile):
+def main(inputDir, outputDir):
 	item_udf = udf(lambda payload: getItemName(payload))
 	end_time_udf = udf(lambda end_time_list: getEndTime(end_time_list))
 	df = spark.read.parquet(inputDir+'/*')
