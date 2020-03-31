@@ -1,12 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
-import findspark
-findspark.init()
-
 import sys
 import pyspark as ps
 import warnings
@@ -23,57 +14,63 @@ from datetime import datetime
 import pyspark.sql.types as T 
 from pyspark.sql.functions import split, explode
 
-#To get spark. working without throwing a NameError
-import findspark
-findspark.init()
-import pyspark # Call this only after findspark
-from pyspark.context import SparkContext
-from pyspark.sql.session import SparkSession
-sc = SparkContext.getOrCreate()
-spark = SparkSession(sc)
+import argparse
+from configparser import ConfigParser
 
+from Utils.Utils import getDuration
 
-# In[ ]:
+conf = SparkConf()
+conf.setAppName('pillar')
+sc = SparkContext(conf=conf)
+sc.setLogLevel('WARN')
+sql_context = SQLContext(sc)
+spark = SparkSession.builder.appName('pillar').getOrCreate()
 
+def convertLength(length):
+    return int(length.split(':')[0])*60+int(length.split(':')[1])
 
-#ACTUAL FUNCTION
+def countForActive(duration,length, durationThreshold, percentageThreshold):
+    if int(duration) < int(length) and int(length) > durationThreshold and int(duration)/int(length) > percentageThreshold:
+        return 1
+    elif int(duration) >= int(length):
+        return 1
+    else:
+        return 0
 
-#for renaming the columns
-from functools import reduce
+def percentageActive(numActive,numTotal):
+    return int(numActive)/int(numTotal)
 
-#allow us to use SQL Count function for aggregation in groupBY
-from pyspark.sql.functions import count
+def durationCheck(duration,length):
+    return not (int(duration)>int(length) or int(duration)<0)
 
-#allow us to read csv to dataframe
-import pandas as pd #need Pandas
-from pyspark.sql.types import *
+def main(inputDir, contentMap, outputDir, configFile):
+    LONG_ITEM_DURATION_THRESHOLD = int(configFile.get('usage','LONG_ITEM_DURATION_THRESHOLD'))
+    LONG_ITEM_PERCENTAGE_THRESHOLD = float(configFile.get('usage','LONG_ITEM_PERCENTAGE_THRESHOLD'))
 
-
-#eventClassifierDF can be a dataframe or the directory of a CSV file
-def usageCounter(eventClassifierDF, toCSV = False):
-    #event Classifier DF has features Device ID, Content ID(ID of song, story, etc.), Time Period
-    #Columns must be in order specified above
+    duration_udf = udf(lambda start, end: getDuration(start,end))
+    length_udf = udf(lambda length: convertLength(length))
+    count_active_udf = udf(lambda duration,length, durationThreshold, percentageThreshold: countForActive(duration,length, durationThreshold, percentageThreshold))
+    percentage_udf = udf(lambda numActive, numTotal: percentageActive(numActive,numTotal))
+    duration_check_udf = udf(lambda duration, length: durationCheck(duration,length))
     
-    #if CSV directory is inputted, otherwise assumes a Dataframe was inputted
-    if (type(eventClassifierDF) == str):
-        schema = StructType([StructField("Device ID", IntegerType(), True),StructField("Content ID", IntegerType(), True),
-                            StructField("Time Period", StringType(), True)])
-        pd_df = pd.read_csv(eventClassifierDF)
-        pd_df.columns = ["Extra", "Device ID", "Time Period", "Activity Count"]
-        pd_df = pd_df.drop(["Extra"], axis = 1) #has an extra column for some reason, getting rid of it
-        eventClassifierDF = spark.createDataFrame(pd_df, schema=schema)
-    
-    
-    
-    #make sure columns have correct names
-    oldColumns = eventClassifierDF.schema.names
-    df = eventClassifierDF.withColumnRenamed(
-        oldColumns[0], "Device ID").withColumnRenamed( #device id
-        oldColumns[1], "Content ID").withColumnRenamed( #content id
-        oldColumns[2], "Time Period") #time period
-    
-    if(csv): #if we want to write dataframe to CSV
-        df.toPandas().to_csv('Output.csv')
-    else: #if we want to return a dataframe
-        return df.groupBy("Device ID", "Time Period").agg(count("*")).withColumnRenamed("count(1)", "Activity Count")
+    content_map = spark.read.csv(contentMap,header='true').select('title','length')
+    df = spark.read.parquet(inputDir+'/*').dropDuplicates().na.drop()
+    df = df.join(content_map,[df.item_name == content_map.title])
+    df = df.withColumn('duration', duration_udf(df['start_time'],df['end_time']))
+    df = df.withColumn('length', length_udf(df['length']))
+    df = df.withColumn('check',duration_check_udf(df['duration'],df['length']))
+    df = df.filter(df['check']=='true').drop('check')
+    df = df.withColumn('counts_for_active', count_active_udf(df['duration'],df['length'],lit(LONG_ITEM_DURATION_THRESHOLD,lit(LONG_ITEM_PERCENTAGE_THRESHOLD))))
+    df = df.groupBy('device_id','bucket').agg(F.sum('counts_for_active').alias('count'))
+    df.write.parquet(outputDir)
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser() 
+    parser.add_argument('-i', '--input', required=True)
+    parser.add_argument('-m', '--map', required=True)
+    parser.add_argument('-o', '--output', required=True)
+    parser.add_argument('-c', '--config', required=True)
+    args = parser.parse_args()
+    config = ConfigParser()
+    config.read(args.config)
+    main(args.input,args.map,args.output,config)

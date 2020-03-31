@@ -18,7 +18,8 @@ from pyspark.sql.functions import split, explode
 
 CUTOFF_DATE = "2019-12"
 REFERENCE_DATE = "2019-01"
-ANALYSIS_DURATION = 3
+ANALYSIS_DURATION = 90
+BIN_DURATION = 30
 
 # get events from new users before REFERENCE_DATE
 

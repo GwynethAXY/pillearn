@@ -11,3 +11,8 @@ def formDate(year,month,day,time):
 		day = '0'+str(day)
 	date = '-'.join([str(year),str(month),str(day)])
 	return date+"T"+time
+
+def getDuration(start,end):
+	startTime = start.split('T')[1].split('.')[0].split(':')
+	endTime = end.split('T')[1].split('.')[0].split(':')
+	return int(endTime[0])*3600+int(endTime[1])*60+int(endTime[2])-int(startTime[0])*3600-int(startTime[1])*60-int(startTime[2])
