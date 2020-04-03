@@ -10,9 +10,9 @@
     "LONG_ITEM_ACTIVE_PERCENTAGE":0.5
   },
   "activity": {
-    "ACTIVE":5,
-    "SEMI-ACTIVE":3,
-    "RARE":1,
+    "ACTIVE":1.0,
+    "SEMI-ACTIVE":0.5,
+    "RARE":0.2,
     "INACTIVE":0
   }
 
