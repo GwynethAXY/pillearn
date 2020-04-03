@@ -3,7 +3,7 @@ import logging
 from pyspark.sql import SparkSession
 import pandas as pd
 from pandas.testing import assert_frame_equal
-from .ShiftFactorExtractor import ShiftFactorExtractor
+from main.CohortAnalysisPipeline.ShiftFactorExtractor.ShiftFactorExtractor import ShiftFactorExtractor
 
 class PySparkTest(unittest.TestCase):
 	@classmethod
