@@ -12,7 +12,7 @@ from pyspark.sql.functions import split, explode
 
 import argparse
 from configparser import ConfigParser
-
+import sys; sys.path = [''] + sys.path
 from main.CohortAnalysisPipeline.Utils import splitDate,formDate 	
 
 conf = SparkConf()
@@ -50,6 +50,6 @@ if __name__ == "__main__":
 	parser.add_argument('-o', '--output', required=True)
 	parser.add_argument('-c', '--config', required=True)
 	args = parser.parse_args()
-	with open('config.json') as f:
+	with open(args.config) as f:
 	    config = json.load(f)
 	main(args.input,args.output,config)
