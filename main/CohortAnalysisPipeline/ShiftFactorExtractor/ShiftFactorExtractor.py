@@ -6,7 +6,7 @@ from pyspark.sql.functions import lit
 import pyspark.sql.functions as F
 import argparse
 import json
-
+import sys; sys.path = [''] + sys.path
 from main.CohortAnalysisPipeline.Utils import splitDate,formDate 	
 
 conf = SparkConf()
