@@ -12,6 +12,7 @@ from pyspark.sql.functions import split, explode
 
 import argparse
 from configparser import ConfigParser
+import sys; sys.path = [''] + sys.path
 from main.CohortAnalysisPipeline.Utils import getDuration
 
 conf = SparkConf()
