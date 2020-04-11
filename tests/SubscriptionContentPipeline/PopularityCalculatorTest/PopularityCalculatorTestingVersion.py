@@ -1,6 +1,58 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# In[1]:
+
+
+#Takes in/outputs dataframes instead of Parquets to make testing more convenient
+
+
+# In[ ]:
+
+
+#my imports, to make sure it works fine on Jupyter Notebook
+
+import sys
+import warnings
+import re
+import json
+# from pyspark import SparkContext, SparkConf
+# from pyspark.sql import SparkSession
+# from pyspark.sql.context import SQLContext
+# from pyspark.sql.functions import udf
+# from pyspark.sql.functions import lit
+# from pyspark.sql.window import Window
+# import pyspark.sql.functions as F
+# from datetime import datetime
+# import pyspark.sql.types as T 
+# from pyspark.sql.functions import split, explode
+
+#To get spark. working without throwing a NameError
+import findspark
+findspark.init()
+import pyspark as ps # Call this only after findspark
+from pyspark.context import SparkContext
+from pyspark.sql.session import SparkSession
+sc = SparkContext.getOrCreate()
+spark = SparkSession(sc)
+
+
+# In[ ]:
+
+
+#ACTUAL FUNCTION
+
+#for renaming the columns
+from functools import reduce
+
+#allow us to use SQL Count function for aggregation in groupBY
+from pyspark.sql.functions import count
+
+#allow us to read csv to dataframe
+import pandas as pd #need Pandas
+from pyspark.sql.types import *
+
+
 # In[ ]:
 
 
@@ -22,30 +74,12 @@ from datetime import timedelta
 
 #my imports
 from pyspark.sql.types import IntegerType
-
-'''
-	Standardize code to the following structure: everything to be in functions except pyspark envrionment setup
-		- environment setup
-		- user defined functions
-		- main function
-		- program start point
-''' 
-
-# setup
-conf = SparkConf()
-conf.setAppName('pillar')
-sc = SparkContext(conf=conf)
-sc.setLogLevel('WARN')
-sql_context = SQLContext(sc)
-spark = SparkSession.builder.appName('pillar').getOrCreate()
-
-
-# main function: should always take in input file, output file and config file
 def main(inputFile, outputFile, configFile, contentMapping):
-    df = spark.read.parquet(inputFile+'/*').dropDuplicates().na.drop()
-    contentMapping = spark.read.parquet(contentMapping+'/*') #right formatting?
+    #df = spark.read.parquet(inputFile+'/*').dropDuplicates().na.drop()
+    df = inputFile #is just a df
+    #contentMapping = spark.read.parquet(contentMapping+'/*') #right formatting?
     
-     #get rid of ".mp3" in item_name
+    #get rid of ".mp3" in item_name
     df = df.withColumnRenamed("item_name", "to_del")
     df = df.withColumn("item_name", F.split(df['to_del'], '\.')[0])
     df = df.drop('to_del')
@@ -88,22 +122,12 @@ def main(inputFile, outputFile, configFile, contentMapping):
     #drop the rows with invalid percent played
     df = df.filter((df.weight != -999.999))
 
-    df.write.parquet(outputFile) # Write onto output Parquet
+    #df.write.parquet(outputFile) # Write onto output Parquet
+    return df #return changed df
 
 
-# program start point
-if __name__ == "__main__":
-    ''' 
-        Add arguments to script during execution on command line
-        Example of how to run the script: spark-submit template.py -i input.parquet -o output.parquet -c config.ini
-    '''
-    parser = argparse.ArgumentParser() 
-    parser.add_argument('-i', '--input', required=True)
-    parser.add_argument('-o', '--output', required=True)
-    parser.add_argument('-c', '--config', required=True)
-    parser.add_argument('-cm', '--contentmapping', required=True) #added on, so contentMapping is required
-    args = parser.parse_args()
-    config = ConfigParser()
-    config.read(args.config)
-    main(args.input,args.output,config, args.contentmapping)
+# In[ ]:
+
+
+
 
