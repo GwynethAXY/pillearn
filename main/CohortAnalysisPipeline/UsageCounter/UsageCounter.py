@@ -12,8 +12,8 @@ from pyspark.sql.functions import split, explode
 
 import argparse
 from configparser import ConfigParser
-
-from Utils.Utils import getDuration
+import sys; sys.path = [''] + sys.path
+from main.CohortAnalysisPipeline.Utils import getDuration
 
 conf = SparkConf()
 conf.setAppName('pillar')
@@ -22,41 +22,53 @@ sc.setLogLevel('WARN')
 sql_context = SQLContext(sc)
 spark = SparkSession.builder.appName('pillar').getOrCreate()
 
-def convertLength(length):
-    return int(length.split(':')[0])*60+int(length.split(':')[1])
+class UsageCounter(object):
+    def __init__(self, config):
+        self.LONG_ITEM_DURATION_THRESHOLD = int(config['usage']['LONG_ITEM_DURATION_THRESHOLD'])
+        self.LONG_ITEM_ACTIVE_PERCENTAGE = float(config['usage']['LONG_ITEM_ACTIVE_PERCENTAGE'])
+    
+    def process1(self,df,content_map):
+        def convertLength(length):
+            return int(length.split(':')[0])*60+int(length.split(':')[1])
 
-def countForActive(duration,length, durationThreshold, percentageThreshold):
-    if int(duration) < int(length) and int(length) > durationThreshold and int(duration)/int(length) > percentageThreshold:
-        return 1
-    elif int(duration) >= int(length):
-        return 1
-    else:
-        return 0
+        def durationCheck(duration,length):
+            return not (int(duration)>int(length) or int(duration)<0)
 
-def percentageActive(numActive,numTotal):
-    return int(numActive)/int(numTotal)
+        duration_udf = udf(lambda start, end: getDuration(start,end))
+        length_udf = udf(lambda length: convertLength(length))
+        duration_check_udf = udf(lambda duration, length: durationCheck(duration,length))
+        content_map = content_map.select('title','length')
+        df = df.join(content_map,[df.item_name == content_map.title])
+        df = df.withColumn('duration', duration_udf(df['start_time'],df['end_time']))
+        df = df.withColumn('length', length_udf(df['length']))
+        df = df.withColumn('check',duration_check_udf(df['duration'],df['length']))
+        df = df.filter(df['check']=='true').drop('check')
+        return df
+    
+    def process2(self,df):
+        def countForActive(duration,length, durationThreshold, percentageThreshold):
+            if int(duration) < int(length) and int(length) >= durationThreshold and int(duration)/int(length) >= percentageThreshold:
+                return 1
+            elif int(duration) >= int(length):
+                return 1
+            else:
+                return 0
+        count_active_udf = udf(lambda duration,length, durationThreshold, percentageThreshold: countForActive(duration,length, durationThreshold, percentageThreshold))
+        df = df.withColumn('counts_for_active', count_active_udf(df['duration'],df['length'],lit(self.LONG_ITEM_DURATION_THRESHOLD),lit(self.LONG_ITEM_ACTIVE_PERCENTAGE)))
+        df = df.groupBy('device_id','bucket').agg(F.sum('counts_for_active').alias('count'))
+        return df 
 
-def durationCheck(duration,length):
-    return not (int(duration)>int(length) or int(duration)<0)
+    def process(self,df,content_map):
+        df = self.process1(df,content_map)
+        df = self.process2(df)
+        return df
 
 def main(inputDir, contentMap, outputDir, config):
-    LONG_ITEM_DURATION_THRESHOLD = int(config['usage']['LONG_ITEM_DURATION_THRESHOLD'])
-    LONG_ITEM_ACTIVE_PERCENTAGE = float(config['usage']['LONG_ITEM_ACTIVE_PERCENTAGE'])
-    duration_udf = udf(lambda start, end: getDuration(start,end))
-    length_udf = udf(lambda length: convertLength(length))
-    count_active_udf = udf(lambda duration,length, durationThreshold, percentageThreshold: countForActive(duration,length, durationThreshold, percentageThreshold))
-    percentage_udf = udf(lambda numActive, numTotal: percentageActive(numActive,numTotal))
-    duration_check_udf = udf(lambda duration, length: durationCheck(duration,length))
-    content_map = spark.read.csv(contentMap,header='true').select('title','length')
+    uc = UsageCounter(config)
+    content_map = spark.read.csv(contentMap,header='true')
     df = spark.read.parquet(inputDir+'/*').dropDuplicates().na.drop()
-    df = df.join(content_map,[df.item_name == content_map.title])
-    df = df.withColumn('duration', duration_udf(df['start_time'],df['end_time']))
-    df = df.withColumn('length', length_udf(df['length']))
-    df = df.withColumn('check',duration_check_udf(df['duration'],df['length']))
-    df = df.filter(df['check']=='true').drop('check')
-    df = df.withColumn('counts_for_active', count_active_udf(df['duration'],df['length'],lit(LONG_ITEM_DURATION_THRESHOLD),lit(LONG_ITEM_ACTIVE_PERCENTAGE)))
-    df = df.groupBy('device_id','bucket').agg(F.sum('counts_for_active').alias('count'))
-    df.write.parquet(outputDir)
+    output = uc.process(df,content_map)
+    output.write.parquet(outputDir)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser() 
@@ -65,6 +77,6 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--output', required=True)
     parser.add_argument('-c', '--config', required=True)
     args = parser.parse_args()
-    with open('config.json') as f:
+    with open(args.config) as f:
         config = json.load(f)
     main(args.input,args.map,args.output,config)
