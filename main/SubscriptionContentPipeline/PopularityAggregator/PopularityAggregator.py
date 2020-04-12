@@ -35,14 +35,24 @@ spark = SparkSession(sc)
 sc.setLogLevel('WARN')
 sql_context = SQLContext(sc)
 spark = SparkSession.builder.appName('pillar').getOrCreate()
+
+class PopularityAggregator(object):
+	def __init__(self):
+		pass
+
+	def process(self,df,profile):
+		df = df.join(profile, 'device_id')
+		df = df.select('item_name', 'weight', 'age', 'gender')
+		df = df.groupBy(['item_name', 'age', 'gender']).agg(F.sum("weight").alias("weighted_sum"))
+		return df
+
 # main function: should always take in input file, output file and config file
 def main(inputDir,profileMap,outputDir,config):
-    profile = spark.read.csv(profileMap, header='true')
-    df = spark.read.parquet(inputDir+"/*")
-    df = df.join(profile, 'device_id')
-    df = df.select('item_name', 'weight', 'age', 'gender')
-    df = df.groupBy(['item_name', 'age', 'gender']).agg(F.sum("weight").alias("weighted_sum"))
-    df.write.parquet(outputDir)
+	pa = PopularityAggregator()
+	profile = spark.read.csv(profileMap, header='true')
+	df = spark.read.parquet(inputDir+"/*")
+	output = pa.process(df, profile)
+	output.write.parquet(outputDir)
 
 # program start point
 if __name__ == "__main__":
