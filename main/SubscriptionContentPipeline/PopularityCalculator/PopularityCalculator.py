@@ -39,9 +39,20 @@ sc.setLogLevel('WARN')
 sql_context = SQLContext(sc)
 spark = SparkSession.builder.appName('pillar').getOrCreate()
 
+#config accessor
+class popularityCalculator(object):
+    def __init__(self, config):
+        self.first = float(config['weights']['FIRST'])
+        self.second = float(config['weights']['SECOND'])
+        self.third = float(config['weights']['THIRD'])
+        self.fourth = float(config['weights']['FOURTH'])
 
 # main function: should always take in input file, output file and config file
 def main(inputFile, outputFile, configFile, contentMapping):
+    
+    #config
+    uc = popularityCalculator(configFile)
+    
     df = spark.read.parquet(inputFile+'/*').dropDuplicates().na.drop()
     contentMapping = spark.read.parquet(contentMapping+'/*') #right formatting?
     
@@ -79,10 +90,10 @@ def main(inputFile, outputFile, configFile, contentMapping):
     #assign weights based on Percent Played
     df = df.withColumn(
     'weight',
-    F.when((F.col("PercentPlayed") >= 0.0) & (F.col("PercentPlayed") < 0.25), 0.0)\
-    .when((F.col("PercentPlayed") >= 0.25) & (F.col("PercentPlayed") < 0.50), 0.33)\
-    .when((F.col("PercentPlayed") >= 0.50) & (F.col("PercentPlayed") < 0.75), 0.66)\
-    .when((F.col("PercentPlayed") >= 0.75) & (F.col("PercentPlayed") <= 1.00), 0.66)\
+    F.when((F.col("PercentPlayed") >= 0.0) & (F.col("PercentPlayed") < 0.25), uc.first)\
+    .when((F.col("PercentPlayed") >= 0.25) & (F.col("PercentPlayed") < 0.50), uc.second)\
+    .when((F.col("PercentPlayed") >= 0.50) & (F.col("PercentPlayed") < 0.75), uc.third)\
+    .when((F.col("PercentPlayed") >= 0.75) & (F.col("PercentPlayed") <= 1.00), uc.fourth)\
     .otherwise(-999.999)
     )
     #drop the rows with invalid percent played
