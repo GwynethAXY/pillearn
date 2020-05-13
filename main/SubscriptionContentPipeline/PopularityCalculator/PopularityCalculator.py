@@ -35,7 +35,7 @@ def main(inputFile, outputFile, configFile, contentMapping):
     uc = popularityCalculator(configFile)
     
     df = spark.read.parquet(inputFile+'/*').dropDuplicates().na.drop()
-    contentMapping = spark.read.parquet(contentMapping+'/*') #right formatting?
+    contentMapping = spark.read.csv(contentMapping,header='true')
     
      #get rid of ".mp3" in item_name
     df = df.withColumnRenamed("item_name", "to_del")
