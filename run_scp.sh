@@ -1,5 +1,5 @@
 # set up
-CONFIG_FILE='main/SubscriptionContentPipeline/config.ini'
+CONFIG_FILE='main/SubscriptionContentPipeline/config.json'
 
 removeFolderIfExist(){
 	if [ -d $1 ]
@@ -21,12 +21,12 @@ terminateIfNotExist(){
 echo '================= RUNNING STAGE 1: SCHEMATRANSFORMER ================='
 
 ST_SCRIPT='main/SubscriptionContentPipeline/SchemaTransformer/SchemaTransformer.py'
-ST_INPUT='main/data/device_logs_new' # DIRECTORY OF DEVICE LOGS
+ST_INPUT='main/data/device_logs_sample' # DIRECTORY OF DEVICE LOGS
 ST_OUTPUT='main/data/intermediate_output/SCP_01'
 echo 'Checking if $ST_OUTPUT exists ...'
 removeFolderIfExist $ST_OUTPUT
 terminateIfNotExist $ST_INPUT
-spark-submit --master local[*] $ST_SCRIPT -i $ST_INPUT -o $ST_OUTPUT -c $CONFIG_FILE
+spark-submit --master local[*] $ST_SCRIPT -i $ST_INPUT -o $ST_OUTPUT
 
 # Stage 2: PopularityCalculator
 echo '================= RUNNING STAGE 2: POPULARITYCALCULATOR ================='
@@ -34,7 +34,7 @@ echo '================= RUNNING STAGE 2: POPULARITYCALCULATOR ================='
 PC_SCRIPT='main/SubscriptionContentPipeline/PopularityCalculator/PopularityCalculator.py'
 PC_INPUT='main/data/intermediate_output/SCP_01'
 PC_OUTPUT='main/data/intermediate_output/SCP_02'
-PC_CONTENT='main/data/reference/content_mapping.parquet'
+PC_CONTENT='main/data/reference/content_mapping.csv'
 echo 'Checking if $PC_OUTPUT exists ...'
 removeFolderIfExist $PC_OUTPUT
 terminateIfNotExist $PC_INPUT

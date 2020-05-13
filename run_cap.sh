@@ -26,7 +26,7 @@ SFE_OUTPUT='main/data/intermediate_output/CAP_01'
 echo 'Checking if $SFE_OUTPUT exists ...'
 removeFolderIfExist $SFE_OUTPUT
 terminateIfNotExist $SFE_INPUT
-spark-submit --master local[*] $SFE_SCRIPT -i $SFE_INPUT -o $SFE_OUTPUT -c $CONFIG_FILE
+spark-submit --master local[*] $SFE_SCRIPT -i $SFE_INPUT -o $SFE_OUTPUT -c $CONFIG_FILE \
 
 # Stage 2: EventTransformer
 echo '================= RUNNING STAGE 2: EVENTTRANSFORMER ================='
